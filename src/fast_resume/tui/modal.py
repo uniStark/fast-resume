@@ -148,7 +148,9 @@ class DeleteConfirmModal(ModalScreen[bool]):
                 yield Button("Delete", id="delete-confirm-btn", variant="error")
 
     def on_mount(self) -> None:
-        self.query_one("#delete-cancel-btn", Button).focus()
+        # Focus the Delete button so Enter confirms (matches `y`); the focus
+        # ring then truthfully reflects what Enter does. n/Esc still cancel.
+        self.query_one("#delete-confirm-btn", Button).focus()
 
     def action_confirm(self) -> None:
         self.dismiss(True)
