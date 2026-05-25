@@ -243,6 +243,33 @@ class SessionSearch:
         self._index.update_sessions([session])
         return session.title
 
+    def can_delete(self, session: Session) -> bool:
+        adapter = self.get_adapter_for_session(session)
+        return bool(adapter and adapter.supports_delete)
+
+    def get_session_path(self, session: Session) -> str | None:
+        adapter = self.get_adapter_for_session(session)
+        if adapter is None or not adapter.supports_delete:
+            return None
+        return adapter.get_session_path(session.id)
+
+    def delete_session(self, session: Session) -> bool:
+        """Delete the session's real file, then purge it from index/overrides/caches.
+
+        Returns True on success, False if unsupported or the file delete failed.
+        """
+        adapter = self.get_adapter_for_session(session)
+        if adapter is None or not adapter.supports_delete:
+            return False
+        if not adapter.delete_session(session.id):
+            return False
+        self._index.delete_sessions([session.id])
+        self._index.overrides.clear(session.id)
+        self._sessions_by_id.pop(session.id, None)
+        if self._sessions is not None:
+            self._sessions = [s for s in self._sessions if s.id != session.id]
+        return True
+
     def search(
         self,
         query: str,

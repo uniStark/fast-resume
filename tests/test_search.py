@@ -815,3 +815,69 @@ def test_rename_session_empty_restores_base(temp_dir):
     assert session.title == "Original"
     assert engine._index.overrides.get("s1") is None
     assert engine._index.get_all_sessions()[0].title == "Original"
+
+
+def test_can_delete_reflects_adapter(temp_dir):
+    from datetime import datetime
+    from unittest.mock import MagicMock
+    from fast_resume.adapters.base import Session
+    from fast_resume.search import SessionSearch
+
+    engine = SessionSearch()
+    sess = Session(id="s1", agent="claude", title="t", directory="/tmp",
+                   timestamp=datetime(2024, 1, 1), content="c", message_count=1)
+    adapter = MagicMock()
+    adapter.supports_delete = True
+    engine.get_adapter_for_session = lambda s: adapter
+    assert engine.can_delete(sess) is True
+    adapter.supports_delete = False
+    assert engine.can_delete(sess) is False
+
+
+def test_delete_session_purges_everywhere(temp_dir):
+    from datetime import datetime
+    from unittest.mock import MagicMock
+    from fast_resume.adapters.base import Session
+    from fast_resume.index import TantivyIndex
+    from fast_resume.overrides import TitleOverrides
+    from fast_resume.search import SessionSearch
+
+    engine = SessionSearch()
+    engine._index = TantivyIndex(
+        index_path=temp_dir / "idx",
+        overrides=TitleOverrides(path=temp_dir / "ov.json"),
+    )
+    sess = Session(id="s1", agent="claude", title="t", directory="/tmp",
+                   timestamp=datetime(2024, 1, 1), content="c", message_count=1)
+    engine._index.add_sessions([sess])
+    engine._index.overrides.set("s1", "custom")
+    engine._sessions = [sess]
+    engine._sessions_by_id = {"s1": sess}
+
+    adapter = MagicMock()
+    adapter.supports_delete = True
+    adapter.delete_session.return_value = True
+    engine.get_adapter_for_session = lambda s: adapter
+
+    assert engine.delete_session(sess) is True
+    adapter.delete_session.assert_called_once_with("s1")
+    assert engine._index.get_all_sessions() == []
+    assert engine._index.overrides.get("s1") is None
+    assert "s1" not in engine._sessions_by_id
+    assert engine._sessions == []
+
+
+def test_delete_session_unsupported_returns_false(temp_dir):
+    from datetime import datetime
+    from unittest.mock import MagicMock
+    from fast_resume.adapters.base import Session
+    from fast_resume.search import SessionSearch
+
+    engine = SessionSearch()
+    sess = Session(id="s1", agent="crush", title="t", directory="/tmp",
+                   timestamp=datetime(2024, 1, 1), content="c", message_count=1)
+    adapter = MagicMock()
+    adapter.supports_delete = False
+    engine.get_adapter_for_session = lambda s: adapter
+    assert engine.delete_session(sess) is False
+    adapter.delete_session.assert_not_called()
