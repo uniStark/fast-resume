@@ -53,3 +53,10 @@ def test_corrupt_json_falls_back_to_empty(temp_dir):
 def test_missing_file_is_empty(temp_dir):
     store = TitleOverrides(path=temp_dir / "does_not_exist.json")
     assert store.all() == {}
+
+
+def test_non_dict_json_falls_back_to_empty(temp_dir):
+    path = temp_dir / "overrides.json"
+    path.write_text("[1, 2, 3]")  # valid JSON, wrong shape
+    store = TitleOverrides(path=path)
+    assert store.all() == {}

@@ -33,13 +33,19 @@ class TitleOverrides:
         if not isinstance(raw, dict):
             return {}
         # Keep only str -> str entries
-        return {str(k): str(v) for k, v in raw.items() if isinstance(v, str)}
+        return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
 
     def _save(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
-        tmp.write_bytes(orjson.dumps(self._data))
-        os.replace(tmp, self._path)
+        # Persist atomically. A disk error must not crash callers (e.g. the TUI
+        # rename action); the in-memory state stands and the index still reflects
+        # the new title until the next rebuild.
+        try:
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._path.with_name(self._path.name + ".tmp")
+            tmp.write_bytes(orjson.dumps(self._data))
+            os.replace(tmp, self._path)
+        except OSError as e:
+            logger.warning("Could not save title overrides to %s: %s", self._path, e)
 
     def get(self, session_id: str) -> str | None:
         return self._data.get(session_id)
