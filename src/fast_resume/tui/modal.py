@@ -7,7 +7,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label
 
-from .styles import YOLO_MODAL_CSS, RENAME_MODAL_CSS
+from .styles import RENAME_MODAL_CSS, YOLO_MODAL_CSS
 
 
 class YoloModeModal(ModalScreen[bool]):

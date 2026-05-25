@@ -82,6 +82,23 @@ class TestTantivyIndex:
         result = idx.get_all_sessions()[0]
         assert result.title == "Test session"
 
+    def test_override_survives_rebuild(self, temp_dir, sample_session):
+        # User renamed a session; the override is persisted to disk.
+        ov_path = temp_dir / "ov.json"
+        TitleOverrides(path=ov_path).set(sample_session.id, "Kept name")
+        # Simulate `fr --rebuild`: a brand-new index dir, the override store
+        # reloaded fresh from disk, and a freshly-parsed session (base_title=""
+        # as adapters produce it). The override must re-apply.
+        idx = TantivyIndex(
+            index_path=temp_dir / "rebuilt",
+            overrides=TitleOverrides(path=ov_path),
+        )
+        idx.add_sessions([sample_session])
+
+        result = idx.get_all_sessions()[0]
+        assert result.title == "Kept name"
+        assert result.base_title == "Test session"
+
     def test_add_and_retrieve_sessions(self, index, sample_session):
         """Test adding and retrieving sessions."""
         index.add_sessions([sample_session])
