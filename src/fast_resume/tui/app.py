@@ -569,9 +569,12 @@ class FastResumeApp(App):
         if not self.search_engine.delete_session(session):
             self.notify("Delete failed", severity="error", timeout=3)
             return
+        # Drop it from the loaded list so the footer count stays accurate.
+        self.sessions = [s for s in self.sessions if s.id != session.id]
         table = self.query_one(ResultsTable)
         remaining = [s for s in table.displayed_sessions if s.id != session.id]
         self.selected_session = table.update_sessions(remaining, self._current_query)
+        self._update_session_count()
         self.notify("Session deleted", timeout=2)
 
     # -------------------------------------------------------------------------

@@ -1562,6 +1562,30 @@ class TestDeleteAction:
                 mock_search_engine.delete_session.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_enter_confirms_delete_modal(self, mock_search_engine):
+        """Enter in the delete modal must confirm (delete), not cancel — locks in
+        the focus-Delete-button fix. Asserts delete_session fires."""
+        from fast_resume.tui.modal import DeleteConfirmModal
+
+        mock_search_engine.can_delete.return_value = True
+        mock_search_engine.get_session_path.return_value = "/tmp/s.jsonl"
+        mock_search_engine.delete_session.return_value = True
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                target = app.selected_session
+                app.action_delete_session()
+                await pilot.pause()
+                assert isinstance(app.screen, DeleteConfirmModal)
+                await pilot.press("enter")
+                await pilot.pause()
+                assert not isinstance(app.screen, DeleteConfirmModal)
+                mock_search_engine.delete_session.assert_called_once_with(target)
+
+    @pytest.mark.asyncio
     async def test_escape_cancels_rename_modal(self, mock_search_engine):
         """Escape must cancel the rename modal and keep the app running."""
         with patch(
