@@ -11,6 +11,7 @@ import tantivy
 
 from .adapters.base import Session
 from .config import INDEX_DIR, SCHEMA_VERSION
+from .overrides import TitleOverrides
 from .query import DateFilter, DateOp, Filter
 
 # Version file to detect schema changes
@@ -55,11 +56,16 @@ class TantivyIndex:
     This is the single source of truth for session data.
     """
 
-    def __init__(self, index_path: Path = INDEX_DIR) -> None:
+    def __init__(
+        self,
+        index_path: Path = INDEX_DIR,
+        overrides: TitleOverrides | None = None,
+    ) -> None:
         self.index_path = index_path
         self._index: tantivy.Index | None = None
         self._schema: tantivy.Schema | None = None
         self._version_file = index_path / _VERSION_FILE
+        self.overrides = overrides if overrides is not None else TitleOverrides()
 
     def _build_schema(self) -> tantivy.Schema:
         """Build the Tantivy schema for sessions."""
@@ -68,6 +74,12 @@ class TantivyIndex:
         schema_builder.add_text_field("id", stored=True, tokenizer_name="raw")
         # Title - stored and indexed for search
         schema_builder.add_text_field("title", stored=True)
+        # Base title - the parsed-from-source title, stored for restoration.
+        # Used to restore the original title when an override is cleared.
+        # Not part of the searched fields (search only parses title/content),
+        # so it never affects relevance. (tantivy 0.25.1 has no `indexed=`
+        # kwarg; a stored text field is the supported way to express this.)
+        schema_builder.add_text_field("base_title", stored=True)
         # Directory - stored with raw tokenizer for regex substring matching
         schema_builder.add_text_field("directory", stored=True, tokenizer_name="raw")
         # Agent - stored for filtering (raw tokenizer to preserve hyphens)
@@ -397,6 +409,7 @@ class TantivyIndex:
                 message_count=doc.get_first("message_count") or 0,
                 mtime=doc.get_first("mtime") or 0.0,
                 yolo=doc.get_first("yolo") or False,
+                base_title=doc.get_first("base_title") or "",
             )
         except Exception:
             return None
@@ -412,6 +425,27 @@ class TantivyIndex:
             writer.delete_documents_by_term("id", sid)
         writer.commit()
 
+    def _build_document(self, session: Session) -> tantivy.Document:
+        """Build a Tantivy document, applying any title override.
+
+        `title` holds the effective (possibly overridden) title and is searchable.
+        `base_title` holds the original parsed title for restoring on clear.
+        """
+        base = session.base_title or session.title
+        effective = self.overrides.get(session.id) or base
+        return tantivy.Document(
+            id=session.id,
+            title=effective,
+            base_title=base,
+            directory=session.directory,
+            agent=session.agent,
+            content=session.content,
+            timestamp=session.timestamp.timestamp(),
+            message_count=session.message_count,
+            mtime=session.mtime,
+            yolo=session.yolo,
+        )
+
     def add_sessions(self, sessions: list[Session]) -> None:
         """Add sessions to the index."""
         if not sessions:
@@ -420,19 +454,7 @@ class TantivyIndex:
         index = self._ensure_index()
         writer = index.writer()
         for session in sessions:
-            writer.add_document(
-                tantivy.Document(
-                    id=session.id,
-                    title=session.title,
-                    directory=session.directory,
-                    agent=session.agent,
-                    content=session.content,
-                    timestamp=session.timestamp.timestamp(),
-                    message_count=session.message_count,
-                    mtime=session.mtime,
-                    yolo=session.yolo,
-                )
-            )
+            writer.add_document(self._build_document(session))
         writer.commit()
 
     def update_sessions(self, sessions: list[Session]) -> None:
@@ -447,19 +469,7 @@ class TantivyIndex:
             writer.delete_documents_by_term("id", session.id)
         # Add new versions
         for session in sessions:
-            writer.add_document(
-                tantivy.Document(
-                    id=session.id,
-                    title=session.title,
-                    directory=session.directory,
-                    agent=session.agent,
-                    content=session.content,
-                    timestamp=session.timestamp.timestamp(),
-                    message_count=session.message_count,
-                    mtime=session.mtime,
-                    yolo=session.yolo,
-                )
-            )
+            writer.add_document(self._build_document(session))
         writer.commit()
 
     def search(

@@ -6,6 +6,7 @@ import pytest
 
 from fast_resume.adapters.base import Session
 from fast_resume.index import TantivyIndex
+from fast_resume.overrides import TitleOverrides
 from fast_resume.query import Filter
 
 
@@ -47,6 +48,39 @@ def sample_session_updated():
 
 class TestTantivyIndex:
     """Tests for TantivyIndex."""
+
+    def test_override_applied_to_title(self, temp_dir, sample_session):
+        overrides = TitleOverrides(path=temp_dir / "ov.json")
+        overrides.set(sample_session.id, "Renamed by user")
+        idx = TantivyIndex(index_path=temp_dir / "idx", overrides=overrides)
+        idx.add_sessions([sample_session])
+
+        result = idx.get_all_sessions()[0]
+        assert result.title == "Renamed by user"
+        assert result.base_title == "Test session"
+
+    def test_override_searchable(self, temp_dir, sample_session):
+        overrides = TitleOverrides(path=temp_dir / "ov.json")
+        overrides.set(sample_session.id, "Zebraphone")
+        idx = TantivyIndex(index_path=temp_dir / "idx", overrides=overrides)
+        idx.add_sessions([sample_session])
+
+        hits = idx.search("Zebraphone")
+        # search() returns (session_id, score) tuples
+        assert any(sid == sample_session.id for sid, _ in hits)
+
+    def test_clearing_override_restores_base_title(self, temp_dir, sample_session):
+        overrides = TitleOverrides(path=temp_dir / "ov.json")
+        overrides.set(sample_session.id, "Temp name")
+        idx = TantivyIndex(index_path=temp_dir / "idx", overrides=overrides)
+        idx.add_sessions([sample_session])
+        # Reload as it would be in the app, then clear and reindex
+        reloaded = idx.get_all_sessions()[0]
+        overrides.clear(sample_session.id)
+        idx.update_sessions([reloaded])
+
+        result = idx.get_all_sessions()[0]
+        assert result.title == "Test session"
 
     def test_add_and_retrieve_sessions(self, index, sample_session):
         """Test adding and retrieving sessions."""
