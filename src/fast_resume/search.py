@@ -257,6 +257,11 @@ class SessionSearch:
         """Delete the session's real file, then purge it from index/overrides/caches.
 
         Returns True on success, False if unsupported or the file delete failed.
+
+        The file delete is the irreversible point of no return; if a later purge
+        step were to raise, the index/caches briefly still reference a now-missing
+        file, but that self-heals on the next incremental scan (which emits the
+        absent file as a deletion).
         """
         adapter = self.get_adapter_for_session(session)
         if adapter is None or not adapter.supports_delete:

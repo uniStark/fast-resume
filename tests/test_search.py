@@ -881,3 +881,36 @@ def test_delete_session_unsupported_returns_false(temp_dir):
     engine.get_adapter_for_session = lambda s: adapter
     assert engine.delete_session(sess) is False
     adapter.delete_session.assert_not_called()
+
+
+def test_delete_session_file_delete_failure_leaves_state_intact(temp_dir):
+    from datetime import datetime
+    from unittest.mock import MagicMock
+    from fast_resume.adapters.base import Session
+    from fast_resume.index import TantivyIndex
+    from fast_resume.overrides import TitleOverrides
+    from fast_resume.search import SessionSearch
+
+    engine = SessionSearch()
+    engine._index = TantivyIndex(
+        index_path=temp_dir / "idx",
+        overrides=TitleOverrides(path=temp_dir / "ov.json"),
+    )
+    sess = Session(id="s1", agent="claude", title="t", directory="/tmp",
+                   timestamp=datetime(2024, 1, 1), content="c", message_count=1)
+    engine._index.add_sessions([sess])
+    engine._index.overrides.set("s1", "custom")
+    engine._sessions = [sess]
+    engine._sessions_by_id = {"s1": sess}
+
+    adapter = MagicMock()
+    adapter.supports_delete = True
+    adapter.delete_session.return_value = False  # file delete failed
+    engine.get_adapter_for_session = lambda s: adapter
+
+    # File delete failed -> nothing must be purged.
+    assert engine.delete_session(sess) is False
+    assert len(engine._index.get_all_sessions()) == 1
+    assert engine._index.overrides.get("s1") == "custom"
+    assert "s1" in engine._sessions_by_id
+    assert engine._sessions == [sess]
