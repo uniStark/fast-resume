@@ -13,6 +13,7 @@ from fast_resume.adapters.base import Session
 from fast_resume.adapters.claude import ClaudeAdapter
 from fast_resume.adapters.vibe import VibeAdapter
 from fast_resume.index import TantivyIndex
+from fast_resume.overrides import TitleOverrides
 from fast_resume.search import SessionSearch
 
 
@@ -771,3 +772,46 @@ class TestProgressiveIndexing:
         # One session should be updated
         assert updated_count == 1
         assert new_count == 0
+
+
+def test_rename_session_sets_override_and_title(temp_dir):
+    engine = SessionSearch()
+    engine._index = TantivyIndex(
+        index_path=temp_dir / "idx",
+        overrides=TitleOverrides(path=temp_dir / "ov.json"),
+    )
+    session = Session(
+        id="s1", agent="claude", title="Original",
+        directory="/tmp", timestamp=datetime(2024, 1, 1),
+        content="hello", message_count=2, base_title="Original",
+    )
+    engine._index.add_sessions([session])
+
+    effective = engine.rename_session(session, "Brand New")
+
+    assert effective == "Brand New"
+    assert session.title == "Brand New"
+    assert engine._index.overrides.get("s1") == "Brand New"
+    assert engine._index.get_all_sessions()[0].title == "Brand New"
+
+
+def test_rename_session_empty_restores_base(temp_dir):
+    engine = SessionSearch()
+    engine._index = TantivyIndex(
+        index_path=temp_dir / "idx",
+        overrides=TitleOverrides(path=temp_dir / "ov.json"),
+    )
+    session = Session(
+        id="s1", agent="claude", title="Custom",
+        directory="/tmp", timestamp=datetime(2024, 1, 1),
+        content="hello", message_count=2, base_title="Original",
+    )
+    engine._index.overrides.set("s1", "Custom")
+    engine._index.add_sessions([session])
+
+    effective = engine.rename_session(session, "   ")  # blank -> restore
+
+    assert effective == "Original"
+    assert session.title == "Original"
+    assert engine._index.overrides.get("s1") is None
+    assert engine._index.get_all_sessions()[0].title == "Original"
