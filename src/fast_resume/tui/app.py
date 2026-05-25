@@ -95,6 +95,18 @@ class FastResumeApp(App):
         self._available_update: str | None = None
         self._syncing_filter: bool = False  # Prevent infinite loops during sync
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool:
+        """Disable the app-level `escape -> quit` while a modal is open.
+
+        The quit binding is `priority=True`, so without this it intercepts
+        Escape before a modal's own Escape handler runs, making modals
+        impossible to cancel with Escape. When a modal is on the screen stack
+        (len > 1), suppress quit so Escape falls through to the modal.
+        """
+        if action == "quit" and len(self.screen_stack) > 1:
+            return False
+        return True
+
     def compose(self) -> ComposeResult:
         """Create child widgets."""
         with Vertical():
