@@ -7,7 +7,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rich.text import Text
 
+from textual.widgets import Input
+
 from fast_resume.adapters.base import Session
+from fast_resume.tui.modal import RenameModal
 from fast_resume.tui import (
     FastResumeApp,
     KeywordSuggester,
@@ -1353,3 +1356,81 @@ class TestKeywordSuggester:
         """Test that suggestions are case insensitive."""
         result = await suggester.get_suggestion("agent:CL")
         assert result == "agent:claude"
+
+
+class TestRenameAction:
+    """Tests for the rename session action."""
+
+    def _make_app_with_session(self):
+        app = FastResumeApp()
+        session = Session(
+            id="s1", agent="claude", title="Original",
+            directory="/tmp", timestamp=datetime(2024, 1, 1),
+            content="hi", message_count=2, base_title="Original",
+        )
+        app.selected_session = session
+        app.search_engine = MagicMock()
+        return app, session
+
+    def test_rename_callback_saves_new_title(self):
+        app, session = self._make_app_with_session()
+        app.search_engine.rename_session.return_value = "New Name"
+        app.query_one = MagicMock()  # avoid DOM lookup (app not mounted)
+        app.notify = MagicMock()
+        # Simulate the modal returning a new title
+        app._apply_rename(session, "New Name")
+        app.search_engine.rename_session.assert_called_once_with(session, "New Name")
+        app.query_one.return_value.refresh_displayed.assert_called_once()
+
+    def test_rename_callback_ignores_cancel(self):
+        app, session = self._make_app_with_session()
+        app.query_one = MagicMock()
+        app.notify = MagicMock()
+        app._apply_rename(session, None)  # None == cancelled
+        app.search_engine.rename_session.assert_not_called()
+        app.query_one.return_value.refresh_displayed.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_action_pushes_prefilled_modal(
+        self, mock_search_engine, sample_sessions
+    ):
+        """action_rename_session pushes a RenameModal prefilled with the title.
+
+        Calling the action method directly (rather than pressing 'r') keeps the
+        test deterministic; the binding-to-action wiring is exercised elsewhere.
+        """
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                # First session is selected after load
+                assert app.selected_session is not None
+                selected = app.selected_session
+
+                app.action_rename_session()
+                await pilot.pause()
+
+                # A RenameModal should be on top of the screen stack,
+                # prefilled with the selected session's title.
+                assert isinstance(app.screen, RenameModal)
+                rename_input = app.screen.query_one("#rename-input", Input)
+                assert rename_input.value == selected.title
+
+    @pytest.mark.asyncio
+    async def test_action_guard_no_selection(self, mock_search_engine):
+        """action_rename_session does nothing when no session is selected."""
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                app.selected_session = None
+
+                app.action_rename_session()
+                await pilot.pause()
+
+                # No modal pushed; the main screen stays on top.
+                assert not isinstance(app.screen, RenameModal)

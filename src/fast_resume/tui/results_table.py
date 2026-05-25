@@ -159,6 +159,17 @@ class ResultsTable(DataTable):
 
             self.add_row(icon, title, dir_text, msgs_text, time_text)
 
+    def refresh_displayed(self) -> None:
+        """Re-render current rows in place, preserving cursor position.
+
+        Call after mutating a displayed session (e.g. a title rename) so the
+        table reflects the change without losing the user's selection.
+        """
+        row = self.cursor_row
+        self._render_sessions()
+        if row is not None and self._displayed_sessions:
+            self.move_cursor(row=min(row, len(self._displayed_sessions) - 1))
+
     def get_selected_session(self) -> Session | None:
         """Get the currently selected session."""
         if self.cursor_row is not None and self.cursor_row < len(

@@ -225,6 +225,24 @@ class SessionSearch:
 
         return self._sessions, total_new, total_updated, total_deleted
 
+    def rename_session(self, session: Session, new_title: str) -> str:
+        """Set or clear a custom title for a session.
+
+        Blank input clears the override and restores the original parsed title.
+        Mutates `session.title` to the effective title, persists the override,
+        and reindexes the session. Returns the effective title.
+        """
+        cleaned = new_title.strip()
+        base = session.base_title or session.title
+        if cleaned:
+            self._index.overrides.set(session.id, cleaned)
+            session.title = cleaned
+        else:
+            self._index.overrides.clear(session.id)
+            session.title = base
+        self._index.update_sessions([session])
+        return session.title
+
     def search(
         self,
         query: str,

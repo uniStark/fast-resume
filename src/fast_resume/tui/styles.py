@@ -303,3 +303,34 @@ Footer > .footer--description {
     color: $text-muted;
 }
 """
+
+# CSS for the RenameModal
+RENAME_MODAL_CSS = """
+RenameModal {
+    align: center middle;
+}
+
+RenameModal > Vertical {
+    width: 60%;
+    height: auto;
+    padding: 1 2;
+    background: $surface;
+    border: thick $primary;
+}
+
+RenameModal #rename-title {
+    width: 100%;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
+RenameModal #rename-input {
+    width: 100%;
+}
+
+RenameModal #rename-hint {
+    width: 100%;
+    color: $text-muted;
+    margin-top: 1;
+}
+"""

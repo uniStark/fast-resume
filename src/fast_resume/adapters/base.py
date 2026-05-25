@@ -49,6 +49,7 @@ class Session:
     message_count: int = 0  # Number of user + assistant messages
     mtime: float = 0.0  # File modification time for incremental updates
     yolo: bool = False  # Session was started with auto-approve/skip-permissions
+    base_title: str = ""  # Parsed-from-source title before any override is applied
 
 
 @dataclass

@@ -184,6 +184,7 @@ Options:
 | `+` / `-` | Resize preview pane                   |
 | `Tab`     | Accept autocomplete suggestion        |
 | `c`       | Copy full resume command to clipboard |
+| `r`       | Rename session title (empty to restore original) |
 | `Ctrl+P`  | Open command palette                  |
 | `q`/`Esc` | Quit                                  |
 
