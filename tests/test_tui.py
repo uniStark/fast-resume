@@ -1434,3 +1434,67 @@ class TestRenameAction:
 
                 # No modal pushed; the main screen stays on top.
                 assert not isinstance(app.screen, RenameModal)
+
+
+class TestDeleteAction:
+    """Tests for the delete session action."""
+
+    def _make_app(self):
+        app = FastResumeApp()
+        session = Session(
+            id="s1", agent="claude", title="Doomed",
+            directory="/tmp", timestamp=datetime(2024, 1, 1),
+            content="hi", message_count=2, base_title="Doomed",
+        )
+        app.selected_session = session
+        app.search_engine = MagicMock()
+        return app, session
+
+    def test_apply_delete_success_refreshes_table(self):
+        app, session = self._make_app()
+        app.search_engine.delete_session.return_value = True
+        table = MagicMock()
+        table.displayed_sessions = [session]
+        app.query_one = MagicMock(return_value=table)
+        app.notify = MagicMock()
+        app._apply_delete(session)
+        app.search_engine.delete_session.assert_called_once_with(session)
+        table.update_sessions.assert_called_once()
+        passed = table.update_sessions.call_args[0][0]
+        assert session not in passed
+
+    def test_apply_delete_failure_notifies(self):
+        app, session = self._make_app()
+        app.search_engine.delete_session.return_value = False
+        app.query_one = MagicMock()
+        app.notify = MagicMock()
+        app._apply_delete(session)
+        app.notify.assert_called_once()
+        app.query_one.return_value.update_sessions.assert_not_called()
+
+    def test_action_delete_unsupported_shows_toast_no_modal(self):
+        app, session = self._make_app()
+        app.search_engine.can_delete.return_value = False
+        app.notify = MagicMock()
+        app.push_screen = MagicMock()
+        app.action_delete_session()
+        app.notify.assert_called_once()
+        app.push_screen.assert_not_called()
+
+    def test_action_delete_supported_pushes_modal(self):
+        app, session = self._make_app()
+        app.search_engine.can_delete.return_value = True
+        app.search_engine.get_session_path.return_value = "/path/s1.jsonl"
+        app.push_screen = MagicMock()
+        app.action_delete_session()
+        app.push_screen.assert_called_once()
+        from fast_resume.tui.modal import DeleteConfirmModal
+        assert isinstance(app.push_screen.call_args[0][0], DeleteConfirmModal)
+
+
+def test_r_key_not_bound():
+    from fast_resume.tui.app import FastResumeApp
+    keys = [getattr(b, "key", None) for b in FastResumeApp.BINDINGS]
+    assert "r" not in keys
+    assert "right" in keys
+    assert "left" in keys

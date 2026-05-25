@@ -20,7 +20,7 @@ from ..adapters.base import ParseError, Session
 from ..config import LOG_FILE
 from ..search import SessionSearch
 from .filter_bar import FILTER_KEYS, FilterBar
-from .modal import RenameModal, YoloModeModal
+from .modal import DeleteConfirmModal, RenameModal, YoloModeModal
 from .preview import SessionPreview
 from .query import extract_agent_from_query, update_agent_in_query
 from .results_table import ResultsTable
@@ -47,7 +47,8 @@ class FastResumeApp(App):
         Binding("/", "focus_search", "Search", priority=True),
         Binding("enter", "resume_session", "Resume"),
         Binding("c", "copy_path", "Copy resume command", priority=True),
-        Binding("r", "rename_session", "Rename", priority=True),
+        Binding("right", "rename_session", "Rename", priority=True),
+        Binding("left", "delete_session", "Delete", priority=True),
         Binding("ctrl+grave_accent", "toggle_preview", "Preview", priority=True),
         Binding("tab", "accept_suggestion", "Accept", show=False, priority=True),
         Binding("j", "cursor_down", "Down", show=False),
@@ -528,6 +529,38 @@ class FastResumeApp(App):
         table = self.query_one(ResultsTable)
         table.refresh_displayed()
         self.notify(f"Renamed to: {effective}", timeout=2)
+
+    def action_delete_session(self) -> None:
+        """Open a confirmation modal to permanently delete the selected session."""
+        if not self.selected_session:
+            return
+        session = self.selected_session
+        if not self.search_engine.can_delete(session):
+            self.notify(
+                f"Delete not supported for {session.agent}",
+                severity="warning",
+                timeout=3,
+            )
+            return
+        path = self.search_engine.get_session_path(session) or ""
+
+        def on_result(confirmed: bool | None) -> None:
+            if confirmed:
+                self._apply_delete(session)
+
+        self.push_screen(
+            DeleteConfirmModal(session.title, session.agent, path), on_result
+        )
+
+    def _apply_delete(self, session: Session) -> None:
+        """Apply a confirmed delete: purge the session and refresh the table."""
+        if not self.search_engine.delete_session(session):
+            self.notify("Delete failed", severity="error", timeout=3)
+            return
+        table = self.query_one(ResultsTable)
+        remaining = [s for s in table.displayed_sessions if s.id != session.id]
+        self.selected_session = table.update_sessions(remaining, self._current_query)
+        self.notify("Session deleted", timeout=2)
 
     # -------------------------------------------------------------------------
     # UI actions
