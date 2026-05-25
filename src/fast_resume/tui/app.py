@@ -20,7 +20,7 @@ from ..adapters.base import ParseError, Session
 from ..config import LOG_FILE
 from ..search import SessionSearch
 from .filter_bar import FILTER_KEYS, FilterBar
-from .modal import YoloModeModal
+from .modal import RenameModal, YoloModeModal
 from .preview import SessionPreview
 from .query import extract_agent_from_query, update_agent_in_query
 from .results_table import ResultsTable
@@ -47,6 +47,7 @@ class FastResumeApp(App):
         Binding("/", "focus_search", "Search", priority=True),
         Binding("enter", "resume_session", "Resume"),
         Binding("c", "copy_path", "Copy resume command", priority=True),
+        Binding("r", "rename_session", "Rename", priority=True),
         Binding("ctrl+grave_accent", "toggle_preview", "Preview", priority=True),
         Binding("tab", "accept_suggestion", "Accept", show=False, priority=True),
         Binding("j", "cursor_down", "Down", show=False),
@@ -507,6 +508,26 @@ class FastResumeApp(App):
         """Handle result from yolo mode modal."""
         if result is not None:
             self._do_resume(yolo=result)
+
+    def action_rename_session(self) -> None:
+        """Open a modal to rename the selected session's title."""
+        if not self.selected_session:
+            return
+        session = self.selected_session
+
+        def on_result(new_title: str | None) -> None:
+            self._apply_rename(session, new_title)
+
+        self.push_screen(RenameModal(session.title), on_result)
+
+    def _apply_rename(self, session: Session, new_title: str | None) -> None:
+        """Apply a rename result. None means the user cancelled (no change)."""
+        if new_title is None:
+            return
+        effective = self.search_engine.rename_session(session, new_title)
+        table = self.query_one(ResultsTable)
+        table.refresh_displayed()
+        self.notify(f"Renamed to: {effective}", timeout=2)
 
     # -------------------------------------------------------------------------
     # UI actions

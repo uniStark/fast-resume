@@ -1353,3 +1353,36 @@ class TestKeywordSuggester:
         """Test that suggestions are case insensitive."""
         result = await suggester.get_suggestion("agent:CL")
         assert result == "agent:claude"
+
+
+class TestRenameAction:
+    """Tests for the rename session action."""
+
+    def _make_app_with_session(self):
+        app = FastResumeApp()
+        session = Session(
+            id="s1", agent="claude", title="Original",
+            directory="/tmp", timestamp=datetime(2024, 1, 1),
+            content="hi", message_count=2, base_title="Original",
+        )
+        app.selected_session = session
+        app.search_engine = MagicMock()
+        return app, session
+
+    def test_rename_callback_saves_new_title(self):
+        app, session = self._make_app_with_session()
+        app.search_engine.rename_session.return_value = "New Name"
+        app.query_one = MagicMock()  # avoid DOM lookup (app not mounted)
+        app.notify = MagicMock()
+        # Simulate the modal returning a new title
+        app._apply_rename(session, "New Name")
+        app.search_engine.rename_session.assert_called_once_with(session, "New Name")
+        app.query_one.return_value.refresh_displayed.assert_called_once()
+
+    def test_rename_callback_ignores_cancel(self):
+        app, session = self._make_app_with_session()
+        app.query_one = MagicMock()
+        app.notify = MagicMock()
+        app._apply_rename(session, None)  # None == cancelled
+        app.search_engine.rename_session.assert_not_called()
+        app.query_one.return_value.refresh_displayed.assert_not_called()
