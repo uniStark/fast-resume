@@ -5,9 +5,9 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Label
+from textual.widgets import Button, Input, Label
 
-from .styles import YOLO_MODAL_CSS
+from .styles import YOLO_MODAL_CSS, RENAME_MODAL_CSS
 
 
 class YoloModeModal(ModalScreen[bool]):
@@ -71,3 +71,41 @@ class YoloModeModal(ModalScreen[bool]):
     @on(Button.Pressed, "#normal-btn")
     def on_normal_pressed(self) -> None:
         self.dismiss(False)
+
+
+class RenameModal(ModalScreen[str | None]):
+    """Modal to rename a session's title.
+
+    Dismisses with the new title string on Enter (empty string means
+    "clear/restore"), or None on Escape (cancel, no change).
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", show=False),
+    ]
+
+    CSS = RENAME_MODAL_CSS
+
+    def __init__(self, current_title: str = "") -> None:
+        super().__init__()
+        self._current_title = current_title
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Label("Rename session", id="rename-title")
+            yield Input(value=self._current_title, id="rename-input")
+            yield Label(
+                "Enter to save · empty to restore original · Esc to cancel",
+                id="rename-hint",
+            )
+
+    def on_mount(self) -> None:
+        inp = self.query_one("#rename-input", Input)
+        inp.focus()
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+    @on(Input.Submitted, "#rename-input")
+    def on_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value)
