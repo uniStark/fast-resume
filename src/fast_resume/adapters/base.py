@@ -130,6 +130,19 @@ class AgentAdapter(Protocol):
         """Whether this adapter supports yolo mode in resume command."""
         ...
 
+    @property
+    def supports_delete(self) -> bool:
+        """Whether this adapter can delete a session's underlying file."""
+        ...
+
+    def delete_session(self, session_id: str) -> bool:
+        """Delete the session's underlying file. Returns True on success."""
+        ...
+
+    def get_session_path(self, session_id: str) -> str | None:
+        """Return the path of the session's file, or None if not found/unsupported."""
+        ...
+
 
 class BaseSessionAdapter(ABC):
     """Base class for file-based session adapters.
@@ -160,6 +173,30 @@ class BaseSessionAdapter(ABC):
         Override in subclasses that support yolo flags.
         """
         return False
+
+    @property
+    def supports_delete(self) -> bool:
+        """File-based adapters can delete the session's file."""
+        return True
+
+    def get_session_path(self, session_id: str) -> str | None:
+        """Locate the session file for session_id via the file scan."""
+        files = self._scan_session_files()
+        entry = files.get(session_id)
+        return str(entry[0]) if entry else None
+
+    def delete_session(self, session_id: str) -> bool:
+        """Delete the session's underlying file. Returns True on success."""
+        files = self._scan_session_files()
+        entry = files.get(session_id)
+        if entry is None:
+            return False
+        try:
+            entry[0].unlink()
+            return True
+        except OSError as e:
+            logger.warning("Could not delete session file %s: %s", entry[0], e)
+            return False
 
     @abstractmethod
     def _scan_session_files(self) -> dict[str, tuple[Path, float]]:

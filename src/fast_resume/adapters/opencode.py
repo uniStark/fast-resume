@@ -28,6 +28,13 @@ class OpenCodeAdapter:
     color = AGENTS["opencode"]["color"]
     badge = AGENTS["opencode"]["badge"]
     supports_yolo = False
+    supports_delete = False
+
+    def delete_session(self, session_id: str) -> bool:
+        return False
+
+    def get_session_path(self, session_id: str) -> str | None:
+        return None
 
     def __init__(
         self,
