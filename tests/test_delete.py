@@ -37,6 +37,19 @@ def test_claude_delete_missing_returns_false(temp_dir):
     assert adapter.delete_session("does-not-exist") is False
 
 
+def test_claude_delete_oserror_returns_false(temp_dir, monkeypatch):
+    f = _make_claude_session_file(temp_dir)
+    adapter = ClaudeAdapter(sessions_dir=temp_dir)
+
+    def boom(self):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr("pathlib.Path.unlink", boom)
+    # Delete must not raise and must report failure; the file survives.
+    assert adapter.delete_session("sess-abc") is False
+    assert f.exists()
+
+
 def test_nonfile_adapters_do_not_support_delete():
     for adapter in (CrushAdapter(), OpenCodeAdapter(), CopilotVSCodeAdapter()):
         assert adapter.supports_delete is False
