@@ -136,7 +136,13 @@ class DeleteConfirmModal(ModalScreen[bool]):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Label("Delete this session permanently?", id="delete-title")
-            yield Label(f"[{self._agent}] {self._title}", classes="delete-detail")
+            # markup=False: agent/title are data (titles are user content and
+            # may contain brackets) — show them literally, don't parse as markup.
+            yield Label(
+                f"[{self._agent}] {self._title}",
+                classes="delete-detail",
+                markup=False,
+            )
             yield Label(
                 f"This will delete the file: {self._path}"
                 if self._path
