@@ -25,6 +25,13 @@ class CrushAdapter:
     color = AGENTS["crush"]["color"]
     badge = AGENTS["crush"]["badge"]
     supports_yolo = False
+    supports_delete = False
+
+    def delete_session(self, session_id: str) -> bool:
+        return False
+
+    def get_session_path(self, session_id: str) -> str | None:
+        return None
 
     def __init__(self, projects_file: Path | None = None) -> None:
         self._projects_file = (

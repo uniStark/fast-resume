@@ -1434,3 +1434,179 @@ class TestRenameAction:
 
                 # No modal pushed; the main screen stays on top.
                 assert not isinstance(app.screen, RenameModal)
+
+
+class TestDeleteAction:
+    """Tests for the delete session action."""
+
+    def _make_app(self):
+        app = FastResumeApp()
+        session = Session(
+            id="s1", agent="claude", title="Doomed",
+            directory="/tmp", timestamp=datetime(2024, 1, 1),
+            content="hi", message_count=2, base_title="Doomed",
+        )
+        app.selected_session = session
+        app.search_engine = MagicMock()
+        return app, session
+
+    def test_apply_delete_success_refreshes_table(self):
+        app, session = self._make_app()
+        app.search_engine.delete_session.return_value = True
+        table = MagicMock()
+        table.displayed_sessions = [session]
+        app.query_one = MagicMock(return_value=table)
+        app.notify = MagicMock()
+        app._apply_delete(session)
+        app.search_engine.delete_session.assert_called_once_with(session)
+        table.update_sessions.assert_called_once()
+        passed = table.update_sessions.call_args[0][0]
+        assert session not in passed
+
+    def test_apply_delete_failure_notifies(self):
+        app, session = self._make_app()
+        app.search_engine.delete_session.return_value = False
+        app.query_one = MagicMock()
+        app.notify = MagicMock()
+        app._apply_delete(session)
+        app.notify.assert_called_once()
+        app.query_one.return_value.update_sessions.assert_not_called()
+
+    def test_action_delete_unsupported_shows_toast_no_modal(self):
+        app, session = self._make_app()
+        app.search_engine.can_delete.return_value = False
+        app.notify = MagicMock()
+        app.push_screen = MagicMock()
+        app.action_delete_session()
+        app.notify.assert_called_once()
+        app.push_screen.assert_not_called()
+
+    def test_action_delete_supported_pushes_modal(self):
+        app, session = self._make_app()
+        app.search_engine.can_delete.return_value = True
+        app.search_engine.get_session_path.return_value = "/path/s1.jsonl"
+        app.push_screen = MagicMock()
+        app.action_delete_session()
+        app.push_screen.assert_called_once()
+        from fast_resume.tui.modal import DeleteConfirmModal
+        assert isinstance(app.push_screen.call_args[0][0], DeleteConfirmModal)
+
+    @pytest.mark.asyncio
+    async def test_right_arrow_opens_rename_from_search_focus(self, mock_search_engine):
+        """Crux regression: → must reach rename even while the search Input is
+        focused (the exact routing the old printable `r` binding lost), and the
+        key must NOT be typed into the search box.
+        """
+        from textual.widgets import Input
+
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                search = app.query_one("#search-input", Input)
+                assert app.focused is search  # default focus is the search box
+                assert app.selected_session is not None
+
+                await pilot.press("right")
+                await pilot.pause()
+                assert isinstance(app.screen, RenameModal)
+                assert search.value == ""
+
+    @pytest.mark.asyncio
+    async def test_left_arrow_opens_delete_from_search_focus(self, mock_search_engine):
+        """← must reach delete even while the search Input is focused, and the
+        key must NOT be typed into the search box.
+        """
+        from textual.widgets import Input
+        from fast_resume.tui.modal import DeleteConfirmModal
+
+        mock_search_engine.can_delete.return_value = True
+        mock_search_engine.get_session_path.return_value = "/tmp/s.jsonl"
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                search = app.query_one("#search-input", Input)
+                assert app.focused is search
+
+                await pilot.press("left")
+                await pilot.pause()
+                assert isinstance(app.screen, DeleteConfirmModal)
+                assert search.value == ""
+
+    @pytest.mark.asyncio
+    async def test_escape_cancels_delete_modal(self, mock_search_engine):
+        """Escape must cancel the delete modal (not be eaten by app quit) and
+        keep the app running."""
+        from fast_resume.tui.modal import DeleteConfirmModal
+
+        mock_search_engine.can_delete.return_value = True
+        mock_search_engine.get_session_path.return_value = "/tmp/s.jsonl"
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                app.action_delete_session()
+                await pilot.pause()
+                assert isinstance(app.screen, DeleteConfirmModal)
+                await pilot.press("escape")
+                await pilot.pause()
+                assert not isinstance(app.screen, DeleteConfirmModal)
+                assert app.is_running
+                mock_search_engine.delete_session.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_enter_confirms_delete_modal(self, mock_search_engine):
+        """Enter in the delete modal must confirm (delete), not cancel — locks in
+        the focus-Delete-button fix. Asserts delete_session fires."""
+        from fast_resume.tui.modal import DeleteConfirmModal
+
+        mock_search_engine.can_delete.return_value = True
+        mock_search_engine.get_session_path.return_value = "/tmp/s.jsonl"
+        mock_search_engine.delete_session.return_value = True
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                target = app.selected_session
+                app.action_delete_session()
+                await pilot.pause()
+                assert isinstance(app.screen, DeleteConfirmModal)
+                await pilot.press("enter")
+                await pilot.pause()
+                assert not isinstance(app.screen, DeleteConfirmModal)
+                mock_search_engine.delete_session.assert_called_once_with(target)
+
+    @pytest.mark.asyncio
+    async def test_escape_cancels_rename_modal(self, mock_search_engine):
+        """Escape must cancel the rename modal and keep the app running."""
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                app.action_rename_session()
+                await pilot.pause()
+                assert isinstance(app.screen, RenameModal)
+                await pilot.press("escape")
+                await pilot.pause()
+                assert not isinstance(app.screen, RenameModal)
+                assert app.is_running
+                mock_search_engine.rename_session.assert_not_called()
+
+
+def test_r_key_not_bound():
+    from fast_resume.tui.app import FastResumeApp
+    keys = [getattr(b, "key", None) for b in FastResumeApp.BINDINGS]
+    assert "r" not in keys
+    assert "right" in keys
+    assert "left" in keys

@@ -334,3 +334,46 @@ RenameModal #rename-hint {
     margin-top: 1;
 }
 """
+
+# CSS for the DeleteConfirmModal
+DELETE_MODAL_CSS = """
+DeleteConfirmModal {
+    align: center middle;
+}
+
+DeleteConfirmModal > Vertical {
+    width: 70%;
+    height: auto;
+    padding: 1 2;
+    background: $surface;
+    border: thick $error;
+}
+
+DeleteConfirmModal #delete-title {
+    width: 100%;
+    content-align: center middle;
+    color: $error;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+DeleteConfirmModal .delete-detail {
+    width: 100%;
+}
+
+DeleteConfirmModal #delete-path {
+    width: 100%;
+    color: $text-muted;
+    margin-bottom: 1;
+}
+
+DeleteConfirmModal #delete-buttons {
+    width: 100%;
+    height: auto;
+    align: center middle;
+}
+
+DeleteConfirmModal #delete-buttons Button {
+    margin: 0 1;
+}
+"""
