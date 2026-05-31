@@ -94,11 +94,17 @@ class SessionPreview(Static):
                 if end < len(content):
                     preview_text = preview_text + "..."
 
-        # Fall back to full content (limited) if no match found
+        # Fall back to the TAIL of the content (recent messages) if no match.
+        # Align to the next message boundary so we don't start mid-message.
         if not preview_text:
-            preview_text = content[:5000]
             if len(content) > 5000:
-                preview_text += "..."
+                tail = content[-5000:]
+                first_break = tail.find("\n\n")
+                if first_break != -1:
+                    tail = tail[first_break + 2:]
+                preview_text = "..." + tail
+            else:
+                preview_text = content
 
         # Get agent config and icon
         agent_config = AGENTS.get(
@@ -169,11 +175,17 @@ class SessionPreview(Static):
                 if end < len(content):
                     preview_text = preview_text + "..."
 
-        # Fall back to full content (limited) if no match found
+        # Fall back to the TAIL of the content (recent messages) if no match.
+        # Align to the next message boundary so we don't start mid-message.
         if not preview_text:
-            preview_text = content[:5000]
             if len(content) > 5000:
-                preview_text += "..."
+                tail = content[-5000:]
+                first_break = tail.find("\n\n")
+                if first_break != -1:
+                    tail = tail[first_break + 2:]
+                preview_text = "..." + tail
+            else:
+                preview_text = content
 
         # Build rich text with role-based styling
         result = Text()
