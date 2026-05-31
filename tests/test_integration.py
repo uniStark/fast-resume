@@ -304,26 +304,17 @@ class TestEndToEndDataFlow:
             first_session = integration_app.selected_session
             assert first_session is not None
 
-            # Press Enter to resume (triggers the yolo modal since real adapters support it)
+            # Press Enter to resume — no modal anymore (yolo defaults on),
+            # the app exits immediately with a yolo command for yolo-capable
+            # adapters.
             await pilot.press("enter")
             await pilot.pause()
 
-            # App should still be running (modal is shown)
-            assert integration_app.is_running
-
-            # Press 'n' to select normal mode (no yolo)
-            await pilot.press("n")
-            await pilot.pause()
-
-            # App should have exited after modal selection
             assert not integration_app.is_running
 
-            # Check that resume command was generated
             cmd = integration_app.get_resume_command()
             assert cmd is not None
             assert len(cmd) > 0
-
-            # Command should start with the correct agent binary
             assert cmd[0] == first_session.agent
 
     @pytest.mark.asyncio

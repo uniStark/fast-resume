@@ -1,44 +1,5 @@
 """CSS styles for the TUI components."""
 
-# CSS for the YoloModeModal
-YOLO_MODAL_CSS = """
-YoloModeModal {
-    align: center middle;
-    background: rgba(0, 0, 0, 0.6);
-}
-
-YoloModeModal > Vertical {
-    width: 36;
-    height: auto;
-    background: $surface;
-    border: thick $primary 80%;
-    padding: 1 2;
-}
-
-YoloModeModal #title {
-    text-align: center;
-    text-style: bold;
-    width: 100%;
-}
-
-YoloModeModal #buttons {
-    width: 100%;
-    height: auto;
-    align: center middle;
-    margin-top: 1;
-}
-
-YoloModeModal Button {
-    margin: 0 1;
-    min-width: 10;
-    pointer: pointer;
-}
-
-YoloModeModal Button:focus {
-    background: $warning;
-}
-"""
-
 # CSS for the main FastResumeApp
 APP_CSS = """
 Screen {

@@ -20,7 +20,7 @@ from ..adapters.base import ParseError, Session
 from ..config import LOG_FILE
 from ..search import SessionSearch
 from .filter_bar import FILTER_KEYS, FilterBar
-from .modal import DeleteConfirmModal, RenameModal, YoloModeModal
+from .modal import DeleteConfirmModal, RenameModal
 from .preview import SessionPreview
 from .query import extract_agent_from_query, update_agent_in_query
 from .results_table import ResultsTable
@@ -430,42 +430,24 @@ class FastResumeApp(App):
     # Resume logic
     # -------------------------------------------------------------------------
 
-    def _resolve_yolo_mode(
-        self,
-        action: Callable[[bool], None],
-        modal_callback: Callable[[bool | None], None],
-    ) -> None:
-        """Resolve yolo mode and call the action with the result.
+    def _resolve_yolo_mode(self, action: Callable[[bool], None]) -> None:
+        """Resolve yolo mode and call action(yolo_value).
 
-        Determines whether to use yolo mode based on CLI flag, session state,
-        or user selection via modal. Then calls `action(yolo_value)`.
+        Per user preference, every resume defaults to yolo (skip-permissions
+        / dangerous mode) when the adapter supports it. No modal is shown.
+        For adapters that don't support yolo, yolo=False (the flag is ignored
+        downstream anyway). The `--yolo` CLI flag and session-stored yolo are
+        no-ops now (still yield True).
         """
         assert self.selected_session is not None
         adapter = self.search_engine.get_adapter_for_session(self.selected_session)
-
-        # If CLI --yolo flag is set, always use yolo
-        if self.yolo:
-            action(True)
-            return
-
-        # If session has stored yolo mode, use it directly
-        if self.selected_session.yolo:
-            action(True)
-            return
-
-        # If adapter supports yolo but session doesn't have stored value, show modal
-        if adapter and adapter.supports_yolo:
-            self.push_screen(YoloModeModal(), modal_callback)
-            return
-
-        # Otherwise proceed without yolo
-        action(False)
+        action(bool(adapter and adapter.supports_yolo))
 
     def action_copy_path(self) -> None:
         """Copy the full resume command (cd + agent resume) to clipboard."""
         if not self.selected_session:
             return
-        self._resolve_yolo_mode(self._do_copy_command, self._on_copy_yolo_modal_result)
+        self._resolve_yolo_mode(self._do_copy_command)
 
     def _do_copy_command(self, yolo: bool) -> None:
         """Execute the copy command with specified yolo mode."""
@@ -486,11 +468,6 @@ class FastResumeApp(App):
         else:
             self.notify(full_cmd, title="Clipboard unavailable", timeout=5)
 
-    def _on_copy_yolo_modal_result(self, result: bool | None) -> None:
-        """Handle result from yolo mode modal for copy action."""
-        if result is not None:
-            self._do_copy_command(yolo=result)
-
     def action_resume_session(self) -> None:
         """Resume the selected session."""
         if not self.selected_session:
@@ -506,7 +483,7 @@ class FastResumeApp(App):
             )
             return
 
-        self._resolve_yolo_mode(self._do_resume, self._on_yolo_modal_result)
+        self._resolve_yolo_mode(self._do_resume)
 
     def _do_resume(self, yolo: bool) -> None:
         """Execute the resume with specified yolo mode."""
@@ -516,11 +493,6 @@ class FastResumeApp(App):
         )
         self._resume_directory = self.selected_session.directory
         self.exit()
-
-    def _on_yolo_modal_result(self, result: bool | None) -> None:
-        """Handle result from yolo mode modal."""
-        if result is not None:
-            self._do_resume(yolo=result)
 
     def action_rename_session(self) -> None:
         """Open a modal to rename the selected session's title."""
@@ -654,10 +626,6 @@ class FastResumeApp(App):
 
     def action_accept_suggestion(self) -> None:
         """Accept autocomplete suggestion in search input."""
-        # If a modal is open, let it handle tab for focus switching
-        if isinstance(self.screen, YoloModeModal):
-            self.screen.action_toggle_focus()
-            return
         search_input = self.query_one("#search-input", Input)
         if search_input._suggestion:
             search_input.action_cursor_right()
@@ -672,11 +640,8 @@ class FastResumeApp(App):
         self._set_filter(FILTER_KEYS[next_index])
 
     async def action_quit(self) -> None:
-        """Quit the app, or dismiss modal if one is open."""
+        """Quit the app, unless a modal is open (let the modal handle dismiss)."""
         if len(self.screen_stack) > 1:
-            top_screen = self.screen_stack[-1]
-            if isinstance(top_screen, YoloModeModal):
-                top_screen.dismiss(None)
             return
         self.exit()
 

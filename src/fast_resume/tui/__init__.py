@@ -3,7 +3,6 @@
 from .. import __version__
 from .app import FastResumeApp
 from .search_input import KeywordSuggester
-from .modal import YoloModeModal
 from .preview import SessionPreview
 from .utils import (
     ASSETS_DIR,
@@ -45,7 +44,6 @@ __all__ = [
     "run_tui",
     "FastResumeApp",
     "KeywordSuggester",
-    "YoloModeModal",
     "SessionPreview",
     "ASSETS_DIR",
     "copy_to_clipboard",
