@@ -9,6 +9,7 @@ from rich.columns import Columns
 from rich.console import Console, Group, RenderableType
 from rich.markup import escape as escape_markup
 from rich.syntax import Syntax
+from rich.table import Table
 from rich.text import Text
 from textual.widgets import Static
 from textual_image.renderable import Image as ImageRenderable
@@ -106,45 +107,103 @@ class SessionPreview(Static):
             else:
                 preview_text = content
 
-        # Get agent config and icon
+        # Get agent config (color used for assistant cells)
         agent_config = AGENTS.get(
             session.agent, {"color": "white", "badge": session.agent}
         )
-        agent_icon = _get_agent_icon(session.agent)
 
-        # Build list of renderables
-        renderables: list[RenderableType] = []
+        # Pair messages into (user, ai) turns and render as a two-column Table.
+        return self._build_turns_table(preview_text, query, agent_config)
 
-        # Split by double newlines to get individual messages
+    # Max source lines shown for an AI reply in the two-column preview.
+    AI_PREVIEW_LINES = 3
+
+    def _build_turns_table(
+        self, preview_text: str, query: str, agent_config: dict[str, str]
+    ) -> RenderableType:
+        """Render preview_text as a 2-col Table: user on left, AI reply on right.
+
+        AI replies are truncated to the first AI_PREVIEW_LINES source lines.
+        """
+        # Split by blank lines into individual messages.
         messages = preview_text.split("\n\n")
 
-        for i, msg in enumerate(messages):
-            msg = msg.rstrip()
-            if not msg.strip():
-                continue
+        # Strip leading truncation marker glued to the first message ("...» foo").
+        if messages and messages[0].startswith("..."):
+            head = messages[0][3:].lstrip("\n")
+            messages[0] = head
+        # Drop empty / pure-"..." chunks.
+        messages = [m for m in messages if m.strip() and m.strip() != "..."]
 
-            # Detect if this is a user message
-            is_user = msg.startswith("» ")
+        # Walk messages and group into (user, ai) turns.
+        turns: list[tuple[str, str]] = []
+        cur_user: list[str] = []
+        cur_ai: list[str] = []
 
-            if is_user:
-                # User message - render as text
-                text = Text()
-                self._render_message(text, msg, query, is_user, agent_config)
-                renderables.append(text)
+        def flush() -> None:
+            if cur_user or cur_ai:
+                turns.append(("\n".join(cur_user), "\n".join(cur_ai)))
+
+        for raw in messages:
+            msg = raw.rstrip()
+            if msg.startswith("» "):
+                # New user message starts a new turn once the previous turn has
+                # an AI reply (consecutive user-only messages stay in one turn).
+                if cur_ai:
+                    flush()
+                    cur_user, cur_ai = [], []
+                cur_user.append(msg[2:].lstrip())
+            elif msg.startswith("  "):
+                # Assistant block — drop the 2-space indent on every line.
+                stripped = "\n".join(
+                    line[2:] if line.startswith("  ") else line
+                    for line in msg.split("\n")
+                )
+                cur_ai.append(stripped)
             else:
-                # Assistant message - add icon + text
-                if agent_icon is not None:
-                    # Create icon with text on same line using Columns
-                    text = Text()
-                    self._render_message_content(text, msg, query, agent_config)
-                    renderables.append(Columns([agent_icon, text], padding=(0, 1)))
-                else:
-                    # Fallback to badge
-                    text = Text()
-                    self._render_message(text, msg, query, is_user, agent_config)
-                    renderables.append(text)
+                # Unknown role — keep as assistant continuation rather than drop.
+                cur_ai.append(msg)
+        flush()
 
-        return Group(*renderables)
+        table = Table(
+            show_header=False, box=None, padding=(0, 1), expand=True, pad_edge=False
+        )
+        table.add_column("user", ratio=1, overflow="fold", no_wrap=False)
+        table.add_column("ai", ratio=2, overflow="fold", no_wrap=False)
+
+        user_style = "cyan"
+        ai_style = agent_config["color"]
+
+        for user_text, ai_text in turns:
+            # Truncate AI to the first AI_PREVIEW_LINES source lines.
+            ai_lines = ai_text.split("\n") if ai_text else []
+            if len(ai_lines) > self.AI_PREVIEW_LINES:
+                ai_display = "\n".join(ai_lines[: self.AI_PREVIEW_LINES]) + "\n..."
+            else:
+                ai_display = ai_text
+
+            user_cell = (
+                highlight_matches(
+                    escape_markup(user_text), query, style=self.MATCH_STYLE
+                )
+                if user_text
+                else Text("")
+            )
+            ai_cell = (
+                highlight_matches(
+                    escape_markup(ai_display), query, style=self.MATCH_STYLE
+                )
+                if ai_display
+                else Text("")
+            )
+            # Base color per side; match-highlight spans override per-span.
+            if user_text:
+                user_cell.stylize(user_style)
+            if ai_display:
+                ai_cell.stylize(ai_style)
+            table.add_row(user_cell, ai_cell)
+
+        return table
 
     def build_preview_text(self, session: Session, query: str = "") -> Text:
         """Build the preview text for a session. Returns a Rich Text object."""
