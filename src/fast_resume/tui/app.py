@@ -50,7 +50,7 @@ class FastResumeApp(App):
         Binding("right", "rename_session", "Rename", priority=True),
         Binding("left", "delete_session", "Delete", priority=True),
         Binding("ctrl+grave_accent", "toggle_preview", "Preview", priority=True),
-        Binding("tab", "accept_suggestion", "Accept", show=False, priority=True),
+        Binding("tab", "cycle_filter", "Cycle filter", show=False, priority=True),
         Binding("j", "cursor_down", "Down", show=False),
         Binding("k", "cursor_up", "Up", show=False),
         Binding("down", "cursor_down", "Down", show=False),
@@ -623,15 +623,6 @@ class FastResumeApp(App):
             self._syncing_filter = False
 
         self._do_search(self._current_query)
-
-    def action_accept_suggestion(self) -> None:
-        """Tab: accept autocomplete suggestion if present, otherwise cycle the
-        agent filter (All → claude → codex → ...)."""
-        search_input = self.query_one("#search-input", Input)
-        if search_input._suggestion:
-            search_input.action_cursor_right()
-        else:
-            self.action_cycle_filter()
 
     def action_cycle_filter(self) -> None:
         """Cycle to the next agent filter."""
