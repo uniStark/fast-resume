@@ -625,10 +625,13 @@ class FastResumeApp(App):
         self._do_search(self._current_query)
 
     def action_accept_suggestion(self) -> None:
-        """Accept autocomplete suggestion in search input."""
+        """Tab: accept autocomplete suggestion if present, otherwise cycle the
+        agent filter (All → claude → codex → ...)."""
         search_input = self.query_one("#search-input", Input)
         if search_input._suggestion:
             search_input.action_cursor_right()
+        else:
+            self.action_cycle_filter()
 
     def action_cycle_filter(self) -> None:
         """Cycle to the next agent filter."""

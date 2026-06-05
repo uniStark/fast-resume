@@ -866,6 +866,25 @@ class TestFastResumeAppFilters:
                 await pilot.pause()
                 assert "3" in str(count_label.render())
 
+    @pytest.mark.asyncio
+    async def test_tab_cycles_filter_when_no_suggestion(self, mock_search_engine):
+        """Tab in an empty search box cycles to the next agent filter."""
+        from fast_resume.tui.filter_bar import FILTER_KEYS
+        with patch(
+            "fast_resume.tui.app.SessionSearch", return_value=mock_search_engine
+        ):
+            app = FastResumeApp()
+            async with app.run_test(size=(120, 40)) as pilot:
+                await pilot.pause()
+                # default filter = All (None) -> Tab steps to FILTER_KEYS[1]
+                assert app.active_filter == FILTER_KEYS[0]  # None
+                await pilot.press("tab")
+                await pilot.pause()
+                assert app.active_filter == FILTER_KEYS[1]
+                await pilot.press("tab")
+                await pilot.pause()
+                assert app.active_filter == FILTER_KEYS[2]
+
 
 class TestFastResumeAppPreview:
     """Tests for preview pane functionality."""
